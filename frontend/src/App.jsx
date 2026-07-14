@@ -97,7 +97,7 @@ function App() {
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const res = await fetch("http://127.0.0.1:8000/");
+        const res = await fetch("https://productivity-api-51kl.onrender.com");
         if (res.ok) {
           setApiStatus("connected");
         } else {
@@ -126,7 +126,7 @@ function App() {
     setLoading(true);
     const start = performance.now();
     try {
-      const res = await fetch("http://127.0.0.1:8000/predict", {
+      const res = await fetch("https://productivity-api-51kl.onrender.com", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
