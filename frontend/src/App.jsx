@@ -126,7 +126,7 @@ function App() {
     setLoading(true);
     const start = performance.now();
     try {
-      const res = await fetch("https://productivity-api-51kl.onrender.com", {
+      const res = await fetch("https://productivity-api-51kl.onrender.com/predict", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
