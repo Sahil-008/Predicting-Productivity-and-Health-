@@ -1,20 +1,23 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import joblib
 import numpy as np
-from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+app = FastAPI(title="Productivity Prediction API")
 
-# ---- CORS ----
+# ---------------- CORS ----------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5173",   # React dev server
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ---- Load models ----
+# ---------------- Load Models ----------------
 models = {
     "rf": joblib.load("models/rf_smote.pkl"),
     "xgb": joblib.load("models/xgb_smote.pkl"),
@@ -25,10 +28,30 @@ models = {
 scaler = joblib.load("models/logreg_scaler.pkl")
 
 
-# ---- Transform input into 31 features ----
-def transform_input(data):
+# ---------------- Request Model ----------------
+class PredictionRequest(BaseModel):
+    age: int
+    social: float
+    work: float
+    stress: float
+    sleep: float
+    coffee: float
+    job: str
+    gender: str
+    model: str
 
-    # ✅ EXACT 31 features (must match training order)
+
+# ---------------- Response Model ----------------
+class PredictionResponse(BaseModel):
+    prediction: str
+    probability: float
+    confidence: str
+    model: str
+
+
+# ---------------- Feature Transformation ----------------
+def transform_input(data: PredictionRequest):
+
     mean_values = [
         30, 3.5, 50, 8, 5, 7, 1, 5, 2, 10,
         20, 5, 1, 1, 2, 0.4, 2.0,
@@ -41,39 +64,32 @@ def transform_input(data):
 
     features = mean_values.copy()
 
-    # ---- safe extraction (no crash if empty) ----
-    age = int(data["age"]) if data["age"] != "" else 30
-    social = float(data["social"]) if data["social"] != "" else 3.5
-    work = float(data["work"]) if data["work"] != "" else 8
-    stress = float(data["stress"]) if data["stress"] != "" else 5
-    sleep = float(data["sleep"]) if data["sleep"] != "" else 7
-    coffee = float(data["coffee"]) if data["coffee"] != "" else 2
+    features[0] = data.age
+    features[1] = data.social
+    features[3] = data.work
+    features[4] = data.stress
+    features[5] = data.sleep
+    features[8] = data.coffee
 
-    job = data.get("job", "it").lower()
-    gender = data.get("gender", "male").lower()
+    # Derived Features
+    features[15] = data.social / data.work if data.work != 0 else 0
+    features[16] = data.sleep / data.social if data.social != 0 else 0
 
-    # ---- override main features ----
-    features[0] = age
-    features[1] = social
-    features[3] = work
-    features[4] = stress
-    features[5] = sleep
-    features[8] = coffee
-
-    # ---- derived ----
-    features[15] = social / work if work != 0 else 0
-    features[16] = sleep / social if social != 0 else 0
-
-    # ---- gender encoding ----
+    # Gender Encoding
     features[17] = 0
     features[18] = 0
+
+    gender = data.gender.lower()
 
     if gender == "male":
         features[17] = 1
     elif gender == "other":
         features[18] = 1
 
-    # ---- job encoding ----
+    # Job Encoding
+    for i in range(19, 24):
+        features[i] = 0
+
     job_map = {
         "finance": 19,
         "health": 20,
@@ -82,61 +98,71 @@ def transform_input(data):
         "unemployed": 23
     }
 
-    for i in range(19, 24):
-        features[i] = 0
+    if data.job.lower() in job_map:
+        features[job_map[data.job.lower()]] = 1
 
-    if job in job_map:
-        features[job_map[job]] = 1
-
-    return features
+    return np.nan_to_num(features)
 
 
-# ---- Routes ----
+# ---------------- Routes ----------------
 @app.get("/")
 def home():
-    return {"message": "API is running ✅"}
+    return {"message": "API is running 🚀"}
 
 
-@app.post("/predict")
-def predict(data: dict):
-    model_name = data.get("model")
-
-    # ---- validation ----
-    required = ["age", "social", "work", "stress", "sleep", "coffee", "job", "gender"]
-    for r in required:
-        if r not in data:
-            return {"error": f"Missing field: {r}"}
-
-    if model_name not in models:
-        return {"error": "Invalid model name"}
-
-    # ---- transform ----
-    features = transform_input(data)
-
-    if len(features) != 31:
-        return {"error": f"Feature mismatch: got {len(features)}, expected 31"}
-
-    features = np.nan_to_num(features)
-
-    # ---- prepare input ----
-    if model_name == "logreg":
-        features = scaler.transform([features])
-    else:
-        features = [features]
-
-    model = models[model_name]
-
-    # ---- prediction ----
-    prediction = model.predict(features)[0]
-
-    # ---- 🔥 REAL ML SCORE (probability) ----
-    if hasattr(model, "predict_proba"):
-        prob = model.predict_proba(features)[0][1]
-    else:
-        prob = 0.5  # fallback
-
+@app.get("/health")
+def health():
     return {
-        "prediction": int(prediction),
-        "score": round(prob * 100, 2),   # 🔥 REAL ML SCORE
-        "model_used": model_name
+        "status": "healthy",
+        "models_loaded": len(models)
     }
+
+
+@app.post(
+    "/predict",
+    response_model=PredictionResponse
+)
+def predict(data: PredictionRequest):
+
+    if data.model not in models:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid model name"
+        )
+
+    try:
+
+        features = transform_input(data)
+
+        if len(features) != 31:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Expected 31 features but got {len(features)}"
+            )
+
+        if data.model == "logreg":
+            features = scaler.transform([features])
+        else:
+            features = [features]
+
+        model = models[data.model]
+
+        prediction = model.predict(features)[0]
+
+        if hasattr(model, "predict_proba"):
+            probability = float(model.predict_proba(features)[0][1])
+        else:
+            probability = 0.5
+
+        return PredictionResponse(
+            prediction="Healthy" if prediction == 1 else "Unhealthy",
+            probability=round(probability, 4),
+            confidence=f"{probability * 100:.2f}%",
+            model=data.model
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
