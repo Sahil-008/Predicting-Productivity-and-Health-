@@ -10,7 +10,7 @@ app = FastAPI(title="Productivity Prediction API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "https://productivity-api-51kl.onrender.com",   
+        "https://prohealth-check.vercel.app",   
     ],
     allow_credentials=True,
     allow_methods=["*"],
