@@ -42,15 +42,15 @@ def transform_input(data):
     features = mean_values.copy()
 
     # ---- safe extraction (no crash if empty) ----
-    age = int(data["age"]) if data["age"] != "" else 30
-    social = float(data["social"]) if data["social"] != "" else 3.5
-    work = float(data["work"]) if data["work"] != "" else 8
-    stress = float(data["stress"]) if data["stress"] != "" else 5
-    sleep = float(data["sleep"]) if data["sleep"] != "" else 7
-    coffee = float(data["coffee"]) if data["coffee"] != "" else 2
+   age = int(data["age"])
+social = float(data["social"])
+work = float(data["work"])
+stress = float(data["stress"])
+sleep = float(data["sleep"])
+coffee = float(data["coffee"])
 
-    job = data.get("job", "it").lower()
-    gender = data.get("gender", "male").lower()
+   job = data["job"].lower()
+gender = data["gender"].lower()
 
     # ---- override main features ----
     features[0] = age
