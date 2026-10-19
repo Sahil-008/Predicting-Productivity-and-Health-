@@ -137,7 +137,7 @@ def predict(data: dict):
 
     return {
         "prediction": int(prediction),
-        "score": round(prob * 100, 2),   # 🔥 REAL ML SCORE
+        "score": round(prob , 2),   # 🔥 REAL ML SCORE
         "model_used": model_name
 
     }
